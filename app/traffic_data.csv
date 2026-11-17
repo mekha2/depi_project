@@ -1,0 +1,6 @@
+sensor_id,location,vehicles_per_hour,status
+SNS-01,October Bridge,2450,Severe Congestion
+SNS-02,Ring Road,2100,Severe Congestion
+SNS-03,Salah Salem,1600,High Congestion
+SNS-04,University St,650,Normal
+SNS-05,Airport Rd,980,Moderate
