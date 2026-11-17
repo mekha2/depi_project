@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alexandria Traffic</title>
+<style>
+:root{
+  --sea:#0C2D44; --sea2:#123B57; --panel:#163F5C; --foam:#EAF3F5; --mute:#8FB0C2; --line:#2A5675;
+  --sand:#F3DFB6; --ok:#3DBE8B; --warn:#F2B33D; --bad:#EE5A42;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--sea);color:var(--foam);font-family:"Segoe UI",system-ui,sans-serif;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 24px 40px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+h1{margin:0;font-size:2rem;font-weight:700;letter-spacing:-.02em}
+h1 span{color:var(--sand);font-weight:400}
+.meta{color:var(--mute);font-size:.85rem;text-align:right}
+.demo{display:none;background:var(--warn);color:#1b1b1b;font-size:.75rem;padding:2px 9px;border-radius:10px;margin-right:8px}
+.grid{display:grid;grid-template-columns:1.7fr 1fr;gap:18px}
+.card{background:var(--panel);border-radius:14px;padding:18px}
+h2{margin:0 0 12px;font-size:.95rem;font-weight:600;color:var(--sand)}
+
+/* map */
+.map{padding:0;overflow:hidden;position:relative;background:linear-gradient(180deg,#0F3A55 0%,#0B2A40 100%)}
+.map svg{display:block;width:100%;height:auto}
+.road-line{fill:none;stroke-linecap:round;transition:stroke .5s}
+.road-line.hot{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.55}}
+@media (prefers-reduced-motion:reduce){.road-line.hot{animation:none}}
+.map .tag{font-size:12px;fill:var(--foam)}
+
+/* index */
+.index{display:flex;align-items:center;gap:18px}
+.ring{width:120px;height:120px;flex:none}
+.index .big{font-size:2.6rem;font-weight:700;line-height:1}
+.index .lbl{color:var(--mute);font-size:.85rem}
+.state{display:inline-block;margin-top:6px;padding:2px 10px;border-radius:10px;font-size:.8rem;font-weight:600;color:#10202b}
+
+/* alerts */
+.alert{padding:9px 12px;margin-bottom:8px;border-radius:8px;background:rgba(238,90,66,.16);border-left:4px solid var(--bad);font-size:.9rem;display:flex;gap:8px;justify-content:space-between}
+.alert time{color:var(--mute);font-size:.8rem;white-space:nowrap}
+.alert.none{background:rgba(61,190,139,.14);border-left-color:var(--ok);color:var(--foam)}
+
+/* road rows */
+.row{display:grid;grid-template-columns:130px 1fr 52px;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border:0}
+.row .n{font-weight:600}.row .c{font-size:.78rem;color:var(--mute)}
+.track{height:10px;background:var(--sea);border-radius:5px;overflow:hidden}
+.track i{display:block;height:100%;border-radius:5px;transition:width .6s,background .3s}
+.row .p{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+
+.bottom{grid-column:1 / -1}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.8rem;color:var(--mute);margin-top:8px}
+.legend span::before{content:"";display:inline-block;width:14px;height:3px;margin-right:6px;vertical-align:middle;background:var(--c)}
+.peaks{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+.peak{background:var(--sea);border-radius:10px;padding:10px 12px}
+.peak b{display:block;font-size:1.4rem}.peak small{color:var(--mute)}
+@media (max-width:820px){.grid{grid-template-columns:1fr}.meta{text-align:left}h1{font-size:1.5rem}}
+:focus-visible{outline:2px solid var(--sand);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Alexandria <span>traffic now</span></h1>
+  <div class="meta"><span class="demo" id="demo">demo data</span>Updated <b id="updated">–</b> · every 5 s</div>
+</header>
+
+<div class="grid">
+  <section class="card map" aria-label="Road network map">
+    <svg viewBox="0 0 700 440" id="map" role="img" aria-label="Road network colored by congestion">
+      <path d="M0 330 C120 300 220 360 330 335 C460 305 560 350 700 320 L700 440 L0 440Z" fill="#0A2236"/>
+      <text x="26" y="418" class="tag" fill="#6C93AB" style="fill:#6C93AB">Mediterranean Sea</text>
+      <g id="roadsSvg"></g>
+    </svg>
+  </section>
+
+  <div style="display:grid;gap:18px;align-content:start">
+    <section class="card index" aria-label="City congestion index">
+      <svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="50" fill="none" stroke="var(--sea)" stroke-width="12"/>
+        <circle id="ringArc" cx="60" cy="60" r="50" fill="none" stroke="var(--ok)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 314" transform="rotate(-90 60 60)" style="transition:stroke-dasharray .6s,stroke .4s"/></svg>
+      <div><div class="big" id="idxNum">–</div><div class="lbl">city congestion</div><span class="state" id="idxState"></span></div>
+    </section>
+    <section class="card" aria-live="polite"><h2>Alerts</h2><div id="alerts"></div></section>
+    <section class="card"><h2>Roads</h2><div id="rows"></div></section>
+  </div>
+
+  <section class="card bottom chart">
+    <h2>Last 30 readings</h2>
+    <svg id="chart" viewBox="0 0 900 220" role="img" aria-label="Congestion trend per road"></svg>
+    <div class="legend" id="legend"></div>
+    <div class="peaks" id="peaks"></div>
+  </section>
+</div>
+</div>
+
+<script>
+const API_URL="/api/traffic", REFRESH_MS=5000, MAX_POINTS=30, ALERT_AT=80, WARN_AT=50;
+const COLORS=["#6EC1FF","#F3DFB6","#C69BFF","#7EE0B5","#FF9F7A","#FFD84D"];
+// schematic paths (used in order for each road returned by the API)
+const PATHS=[
+ "M30 300 C150 270 230 310 340 285 C460 258 560 290 670 262",   // coast road
+ "M120 60 L260 150 L380 235 L470 285",                          // diagonal
+ "M60 170 L250 150 L450 160 L660 120",                          // horizontal
+ "M470 40 L450 160 L430 270 L420 320",
+ "M560 50 L540 150 L510 235"                           // vertical
+];
+const history={}, peaks={}; let alerts=[];
+const $=id=>document.getElementById(id);
+const col=v=>v>=ALERT_AT?"var(--bad)":v>=WARN_AT?"var(--warn)":"var(--ok)";
+const word=v=>v>=ALERT_AT?"Heavy":v>=WARN_AT?"Busy":"Flowing";
+const ft=d=>d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+
+const CAPACITY=2500; // vehicles/hour that counts as 100% congestion
+function normalize(rows){
+  return rows.map(r=>{
+    if(r.vehicles_per_hour===undefined) return {...r,cars:+r.cars,congestion:+r.congestion};
+    const v=+r.vehicles_per_hour;
+    return {road:r.location,cars:v,congestion:Math.min(100,Math.round(v/CAPACITY*100)),status:r.status,alert:/severe/i.test(r.status||"")};
+  });
+}
+async function getData(){
+  try{const r=await fetch(API_URL,{cache:"no-store"}); if(!r.ok)throw 0; $("demo").style.display="none"; return normalize(await r.json());}
+  catch(e){ $("demo").style.display="inline-block";
+    return ["October Bridge","Ring Road","Salah Salem","University St","Airport Rd"].map(road=>{const c=Math.floor(Math.random()*100);
+      return {road,cars:c,congestion:c,alert:c>ALERT_AT,time:new Date().toISOString()};});}
+}
+
+function update(data){
+  const now=new Date();
+  data.forEach(d=>{
+    (history[d.road] ||= []).push(d.congestion);
+    if(history[d.road].length>MAX_POINTS)history[d.road].shift();
+    if(!peaks[d.road]||d.congestion>=peaks[d.road].v)peaks[d.road]={v:d.congestion,t:now};
+    if(d.alert||d.congestion>=ALERT_AT)alerts.unshift({road:d.road,v:d.congestion,t:now});
+  });
+  alerts=alerts.slice(0,4); render(data,now);
+}
+
+function render(data,now){
+  $("updated").textContent=ft(now);
+  const avg=Math.round(data.reduce((s,d)=>s+d.congestion,0)/data.length);
+  $("idxNum").textContent=avg+"%";
+  $("ringArc").setAttribute("stroke-dasharray",(avg/100*314)+" 314");
+  $("ringArc").style.stroke=col(avg);
+  $("idxState").textContent=word(avg); $("idxState").style.background=col(avg);
+
+  $("alerts").innerHTML=alerts.length
+    ? alerts.map(a=>`<div class="alert"><span><b>${a.road}</b> hit ${a.v}%</span><time>${ft(a.t)}</time></div>`).join("")
+    : `<div class="alert none">All roads below ${ALERT_AT}%</div>`;
+
+  $("rows").innerHTML=data.map(d=>`<div class="row"><div><div class="n">${d.road}</div><div class="c">${d.cars} veh/h${d.status?" · "+d.status:""}</div></div>
+    <div class="track"><i style="width:${d.congestion}%;background:${col(d.congestion)}"></i></div><div class="p">${d.congestion}%</div></div>`).join("");
+
+  $("roadsSvg").innerHTML=data.slice(0,PATHS.length).map((d,i)=>{
+    const hot=d.congestion>=ALERT_AT?" hot":"";
+    const w=10+d.congestion/12;
+    const m=PATHS[i].match(/M(\d+) (\d+)/);
+    return `<path d="${PATHS[i]}" class="road-line" stroke="#0A2236" stroke-width="${w+8}"/>
+      <path d="${PATHS[i]}" class="road-line${hot}" stroke="${col(d.congestion).replace('var(--ok)','#3DBE8B').replace('var(--warn)','#F2B33D').replace('var(--bad)','#EE5A42')}" stroke-width="${w}"/>
+      <text x="${+m[1]}" y="${+m[2]-16}" class="tag">${d.road} · ${d.congestion}%</text>`;
+  }).join("");
+
+  const roads=Object.keys(history);
+  $("peaks").innerHTML=roads.map(r=>`<div class="peak"><small>${r} peak</small><b>${peaks[r].v}%</b><small>at ${ft(peaks[r].t)}</small></div>`).join("");
+  drawChart(roads);
+}
+
+function drawChart(roads){
+  const W=900,H=220,L=34,R=8,T=8,B=8,iw=W-L-R,ih=H-T-B; let s="";
+  [0,50,100].forEach(g=>{const y=T+ih-g/100*ih;
+    s+=`<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="#2A5675"/><text x="${L-6}" y="${y+4}" text-anchor="end" font-size="11" fill="#8FB0C2">${g}</text>`;});
+  const ay=T+ih-ALERT_AT/100*ih;
+  s+=`<line x1="${L}" x2="${W-R}" y1="${ay}" y2="${ay}" stroke="#EE5A42" stroke-dasharray="5 5"/>`;
+  roads.forEach((r,i)=>{const pts=history[r];
+    const d=pts.map((v,k)=>(k?"L":"M")+(L+(k/(MAX_POINTS-1))*iw).toFixed(1)+" "+(T+ih-v/100*ih).toFixed(1)).join(" ");
+    s+=`<path d="${d}" fill="none" stroke="${COLORS[i%6]}" stroke-width="2.5" stroke-linejoin="round"/>`;});
+  $("chart").innerHTML=s;
+  $("legend").innerHTML=roads.map((r,i)=>`<span style="--c:${COLORS[i%6]}">${r}</span>`).join("")+`<span style="--c:#EE5A42">Alert level ${ALERT_AT}%</span>`;
+}
+async function tick(){update(await getData());} tick(); setInterval(tick,REFRESH_MS);
+</script>
+</body>
+</html>
