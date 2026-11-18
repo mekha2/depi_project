@@ -25,9 +25,10 @@ pipeline {
                 echo 'Running temporary container to verify /api/traffic...'
                 sh '''
                     docker rm -f test_traffic_app || true
-                    docker run -d --name test_traffic_app -p 5050:5000 ${IMAGE_NAME}:latest
+                    docker run -d --name test_traffic_app ${IMAGE_NAME}:latest
                     sleep 3
-                    curl -f http://localhost:5050/
+                    TEST_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' test_traffic_app)
+                    curl -f http://${TEST_IP}:5000/
                     docker rm -f test_traffic_app
                 '''
             }
