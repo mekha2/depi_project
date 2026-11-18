@@ -1,0 +1,14 @@
+# Files copied from the repository checkout (traffic_deploy_source: local)
+traffic_stack_sync_items: >-
+  {{ ['app', 'dashboard', 'nginx', 'docker-compose.yml']
+     + (['monitoring', 'docker-compose.monitoring.yml'] if traffic_enable_monitoring | bool else []) }}
+
+# Compose files merged on deployment (monitoring is an add-on on top of the original file)
+traffic_stack_compose_files: >-
+  {{ ['docker-compose.yml']
+     + (['docker-compose.monitoring.yml'] if traffic_enable_monitoring | bool else []) }}
+
+# Rebuild images only when the synced sources actually changed (keeps repeated runs idempotent)
+traffic_stack_build_policy: >-
+  {{ 'always' if ((traffic_stack_copy.changed | default(false)) or (traffic_stack_git.changed | default(false)))
+     else 'policy' }}

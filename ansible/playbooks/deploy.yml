@@ -1,0 +1,6 @@
+- name: Deploy the traffic dashboard stack
+  hosts: traffic_servers
+  become: "{{ traffic_become | bool }}"
+  roles:
+    - role: traffic_stack
+      tags: [deploy]

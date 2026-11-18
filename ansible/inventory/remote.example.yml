@@ -1,0 +1,10 @@
+# Template for a real server. Copy it, edit it, and run with:  ansible-playbook -i inventory/remote.yml playbooks/site.yml
+# (inventory/group_vars/all.yml is picked up automatically because it sits next to the inventory file.)
+all:
+  children:
+    traffic_servers:
+      hosts:
+        traffic-vm:
+          ansible_host: 203.0.113.10          # server IP or DNS name
+          ansible_user: ubuntu                # SSH user with sudo rights
+          ansible_ssh_private_key_file: ~/.ssh/id_ed25519

@@ -1,0 +1,9 @@
+# Full run: server preparation, Docker, then the application stack.
+- name: Prepare server environment
+  ansible.builtin.import_playbook: common.yml
+
+- name: Install and configure Docker
+  ansible.builtin.import_playbook: docker.yml
+
+- name: Deploy the traffic dashboard stack
+  ansible.builtin.import_playbook: deploy.yml

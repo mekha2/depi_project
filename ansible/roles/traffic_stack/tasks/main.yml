@@ -1,0 +1,98 @@
+- name: Check deploy source setting
+  ansible.builtin.assert:
+    that:
+      - traffic_deploy_source in ['local', 'git']
+      - traffic_deploy_source == 'local' or traffic_repo_url | length > 0
+    fail_msg: "traffic_deploy_source must be 'local' or 'git'; 'git' also needs traffic_repo_url."
+
+- name: Check the local repository checkout exists on the Ansible machine
+  ansible.builtin.stat:
+    path: "{{ traffic_project_src }}/docker-compose.yml"
+  delegate_to: localhost
+  become: false
+  register: traffic_stack_src_compose
+  when: traffic_deploy_source == 'local'
+
+- name: Fail if docker-compose.yml is not in traffic_project_src
+  ansible.builtin.assert:
+    that: traffic_stack_src_compose.stat.exists
+    fail_msg: "{{ traffic_project_src }}/docker-compose.yml not found. Set traffic_project_src to the repository root."
+  when: traffic_deploy_source == 'local'
+
+- name: Create project directory
+  ansible.builtin.file:
+    path: "{{ traffic_project_dir }}"
+    state: directory
+    mode: "0755"
+  tags: [sync]
+
+- name: Copy project files from this checkout
+  ansible.builtin.copy:
+    src: "{{ traffic_project_src }}/{{ item }}"
+    dest: "{{ traffic_project_dir }}/"
+    mode: preserve
+  loop: "{{ traffic_stack_sync_items }}"
+  register: traffic_stack_copy
+  when: traffic_deploy_source == 'local'
+  tags: [sync]
+
+- name: Clone or update the project from Git
+  ansible.builtin.git:
+    repo: "{{ traffic_repo_url }}"
+    dest: "{{ traffic_project_dir }}"
+    version: "{{ traffic_repo_version }}"
+  register: traffic_stack_git
+  when: traffic_deploy_source == 'git'
+  tags: [sync]
+
+- name: Write .env with Grafana credentials
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ traffic_project_dir }}/.env"
+    mode: "0600"
+  no_log: true
+  when:
+    - traffic_enable_monitoring | bool
+    - traffic_grafana_admin_password | length > 0
+  tags: [sync]
+
+- name: Start the stack with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ traffic_project_dir }}"
+    files: "{{ traffic_stack_compose_files }}"
+    state: present
+    build: "{{ traffic_stack_build_policy }}"
+  tags: [up]
+
+- name: Wait for the dashboard API to answer
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ traffic_app_port }}/api/traffic"
+    return_content: true
+  register: traffic_stack_api
+  until: traffic_stack_api.status == 200 and (traffic_stack_api.json | length) > 0
+  retries: 15
+  delay: 4
+  when: traffic_verify | bool
+  tags: [verify]
+
+- name: Wait for Prometheus and check it scrapes the app
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ traffic_prometheus_port }}/api/v1/query?query={{ 'up{job=\"traffic-app\"}' | urlencode }}"
+    return_content: true
+  register: traffic_stack_prom
+  until: traffic_stack_prom.status == 200 and (traffic_stack_prom.json.data.result | length) > 0 and traffic_stack_prom.json.data.result[0].value[1] == '1'
+  retries: 15
+  delay: 4
+  when: (traffic_verify | bool) and (traffic_enable_monitoring | bool)
+  tags: [verify]
+
+- name: Check Grafana is healthy
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ traffic_grafana_port }}/api/health"
+    return_content: true
+  register: traffic_stack_grafana
+  until: traffic_stack_grafana.status == 200
+  retries: 15
+  delay: 4
+  when: (traffic_verify | bool) and (traffic_enable_monitoring | bool)
+  tags: [verify]
