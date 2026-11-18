@@ -36,8 +36,11 @@ pipeline {
 
         stage('4. Deploy Services') {
             steps {
-                echo 'Deploying updated stack with Docker Compose...'
-                sh 'docker compose up -d --build'
+                echo 'Deploying updated Traffic App container...'
+                sh '''
+                    docker rm -f traffic-app depi_project-traffic-app-1 || true
+                    docker run -d --name traffic-app --restart always -p 5000:5000 ${IMAGE_NAME}:latest
+                '''
             }
         }
     }
