@@ -1,0 +1,23 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Paths are relative to this file (mounted at /etc/prometheus/ in the container).
+rule_files:
+  - rules/*.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Flask app (metrics_wrapper.py): HTTP metrics, CSV data-source metrics, process CPU/memory
+  - job_name: traffic-app
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["traffic-app:5000"]
+
+  # Per-container CPU and memory for every container on the Docker host
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]

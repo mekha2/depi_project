@@ -1,0 +1,70 @@
+# Monitoring add-on. Does not modify docker-compose.yml; it is merged on top of it:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d --build
+#
+# Prometheus  http://localhost:9090
+# Grafana     http://localhost:3000   (user/password from GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD, default admin/admin)
+
+services:
+  # Rebuild traffic-app from monitoring/app/Dockerfile so it serves /metrics.
+  # Same container name, port exposure and network as in docker-compose.yml.
+  traffic-app:
+    build:
+      context: .
+      dockerfile: monitoring/app/Dockerfile
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: traffic_prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - traffic-app
+      - cadvisor
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: traffic_cadvisor
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: traffic_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

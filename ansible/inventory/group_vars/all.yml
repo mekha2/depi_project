@@ -1,0 +1,36 @@
+# ---- privilege escalation --------------------------------------------------
+# true = use sudo on the target. Set to false only when you already run as root.
+traffic_become: true
+
+# ---- common role -----------------------------------------------------------
+common_packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - git
+common_apt_cache_valid_time: 3600
+common_timezone: ""            # e.g. Africa/Cairo. Empty = leave the server's timezone unchanged.
+
+# ---- docker role -----------------------------------------------------------
+docker_users: []               # users to add to the "docker" group, e.g. [ubuntu]
+docker_manage_service: true    # false on hosts without systemd (WSL1, plain containers)
+docker_configure_daemon: true  # false to leave an existing /etc/docker/daemon.json untouched
+docker_daemon_options:         # written to /etc/docker/daemon.json
+  log-driver: json-file
+  log-opts:
+    max-size: 10m
+    max-file: "3"
+
+# ---- traffic_stack role ----------------------------------------------------
+traffic_project_dir: /opt/traffic-dashboard
+traffic_enable_monitoring: true          # also deploy docker-compose.monitoring.yml
+traffic_deploy_source: local             # local = copy from this repository checkout | git = clone traffic_repo_url
+traffic_project_src: "{{ playbook_dir }}/../.."   # repository root on the machine running Ansible (source: local)
+traffic_repo_url: ""                     # required when traffic_deploy_source is git
+traffic_repo_version: main
+traffic_grafana_admin_user: admin
+traffic_grafana_admin_password: ""       # empty = compose default (admin). Set it with ansible-vault on real servers.
+traffic_app_port: 80
+traffic_prometheus_port: 9090
+traffic_grafana_port: 3000
+traffic_verify: true                     # HTTP checks after deployment

@@ -1,0 +1,81 @@
+- name: Require Ubuntu or Debian on amd64 or arm64
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] in ['Ubuntu', 'Debian']
+      - ansible_facts['architecture'] in ['x86_64', 'aarch64']
+    fail_msg: "Docker's apt repository is configured here for Ubuntu/Debian on amd64/arm64 only."
+
+- name: Install packages needed to add the Docker repository
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gnupg, python3-debian]
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ common_apt_cache_valid_time }}"
+
+- name: Add Docker's apt repository (with its signing key)
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}"
+    suites: "{{ ansible_facts['distribution_release'] }}"
+    components: stable
+    architectures: "{{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}"
+    signed_by: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
+    state: present
+  notify: Update apt cache
+
+- name: Refresh apt cache if the repository changed
+  ansible.builtin.meta: flush_handlers
+
+- name: Install Docker Engine, Buildx and the Compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+
+- name: Create /etc/docker
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: "0755"
+  when: docker_configure_daemon | bool
+
+- name: Configure the Docker daemon
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  when: docker_configure_daemon | bool
+  notify: Restart docker
+
+- name: Apply daemon configuration before continuing
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  when: docker_manage_service | bool
+
+- name: Add users to the docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+
+- name: Verify the Docker daemon answers
+  ansible.builtin.command: docker info
+  changed_when: false
+  when: docker_manage_service | bool
+
+- name: Verify the Compose plugin is installed
+  ansible.builtin.command: docker compose version
+  changed_when: false

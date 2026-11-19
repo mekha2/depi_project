@@ -1,0 +1,96 @@
+groups:
+  - name: traffic-app
+    rules:
+      - alert: TrafficAppDown
+        expr: up{job="traffic-app"} == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Traffic app is down"
+          description: "Prometheus has not been able to scrape traffic-app:5000/metrics for 1 minute."
+
+      - alert: TrafficAppHighErrorRate
+        expr: |
+          sum(rate(traffic_http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(traffic_http_requests_total[5m])) > 0.05
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "More than 5% of requests return 5xx"
+          description: "{{ $value | humanizePercentage }} of requests failed over the last 5 minutes."
+
+      - alert: TrafficAppHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(traffic_http_request_duration_seconds_bucket{endpoint="/"}[5m]))) > 0.5
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 latency of the traffic API is above 500 ms"
+          description: "p95 latency is {{ $value | humanizeDuration }}."
+
+  - name: traffic-data
+    rules:
+      - alert: TrafficDataSourceUnreadable
+        expr: traffic_data_source_up == 0
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "traffic_data.csv cannot be read"
+          description: "The app cannot read or parse its traffic data file, so /api/traffic will fail."
+
+      - alert: TrafficDataEmpty
+        expr: traffic_data_source_up == 1 and traffic_data_rows == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "traffic_data.csv has no valid sensor rows"
+
+      - alert: TrafficDataInvalidRows
+        expr: traffic_data_invalid_rows > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "traffic_data.csv contains invalid rows"
+          description: "{{ $value }} row(s) have missing or non-numeric values and are ignored."
+
+      # 2000 vehicles/hour is 80% of the 2500 vehicles/hour capacity used by dashboard/index.html (ALERT_AT = 80).
+      - alert: SensorSevereCongestion
+        expr: traffic_sensor_vehicles_per_hour >= 2000
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Severe congestion at {{ $labels.location }}"
+          description: "{{ $labels.location }} ({{ $labels.sensor_id }}) reports {{ $value }} vehicles/hour."
+
+  - name: containers
+    rules:
+      - alert: MonitoringTargetDown
+        expr: up{job!="traffic-app"} == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Scrape target {{ $labels.job }} is down"
+
+      - alert: TrafficContainerMissing
+        expr: time() - container_last_seen{name=~"traffic_(dashboard|nginx)"} > 60
+        for: 1m
+        labels: {severity: critical}
+        annotations:
+          summary: "Container {{ $labels.name }} has not been seen for over a minute"
+
+      - alert: ContainerHighCpu
+        expr: sum by (name) (rate(container_cpu_usage_seconds_total{name=~"traffic_.+"}[2m])) * 100 > 80
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Container {{ $labels.name }} uses more than 80% of one CPU core"
+          description: "CPU usage is {{ $value | printf \"%.0f\" }}% of one core."
+
+      - alert: ContainerHighMemory
+        expr: container_memory_working_set_bytes{name=~"traffic_.+"} > 512 * 1024 * 1024
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "Container {{ $labels.name }} uses more than 512 MiB of memory"
+          description: "Working set is {{ $value | humanize1024 }}B."

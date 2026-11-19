@@ -1,0 +1,6 @@
+- name: Prepare server environment
+  hosts: traffic_servers
+  become: "{{ traffic_become | bool }}"
+  roles:
+    - role: common
+      tags: [common]

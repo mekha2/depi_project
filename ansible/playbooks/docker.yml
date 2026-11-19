@@ -1,0 +1,6 @@
+- name: Install and configure Docker
+  hosts: traffic_servers
+  become: "{{ traffic_become | bool }}"
+  roles:
+    - role: docker
+      tags: [docker]

@@ -1,0 +1,24 @@
+- name: Require a Debian-family system (Ubuntu or Debian)
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] == 'Debian'
+    fail_msg: "These roles support Ubuntu and Debian only (found {{ ansible_facts['distribution'] }})."
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: "{{ common_apt_cache_valid_time }}"
+
+- name: Read current timezone
+  ansible.builtin.command: timedatectl show --property=Timezone --value
+  register: common_current_timezone
+  changed_when: false
+  when: common_timezone | length > 0
+
+- name: Set timezone
+  ansible.builtin.command: "timedatectl set-timezone {{ common_timezone }}"
+  changed_when: true
+  when:
+    - common_timezone | length > 0
+    - common_current_timezone.stdout | trim != common_timezone
